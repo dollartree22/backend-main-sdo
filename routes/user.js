@@ -143,9 +143,9 @@ router.get('/me', verifyToken, asyncerror(async (req, res, next) => {
         },
     });
     const verifyDeposit = await Deposit.findOne({ user: req._id, status: "approve" });
-    if (!verifyDeposit) {
-        user.referralcode = "Locked"
-    }
+    // if (!verifyDeposit) {
+    //     user.referralcode = "Locked"
+    // }
     let totalPlanProfit = 0;
     let totalPlanCompleted = 0;
     if (user.membership.plan) {
