@@ -186,7 +186,7 @@ router.post('/sendregotp', asyncerror(async (req, res, next) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>SDO Forget Password OTP</title>
+        <title>One dollar tree Forget Password OTP</title>
         <!-- Include Bootstrap CSS -->
         <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
         <style>
@@ -226,13 +226,13 @@ router.post('/sendregotp', asyncerror(async (req, res, next) => {
     </head>
     <body>
         <div class="container">
-            <h1>SDO Register OTP</h1>
+            <h1>One dollar tree Register OTP</h1>
             <p>Hello,</p>
-            <p>You have requested an Account Creation for a new SDO account. Please use the following OTP to Create your Account:</p>
+            <p>You have requested an Account Creation for a new One dollar tree account. Please use the following OTP to Create your Account:</p>
             <p><strong>Your OTP:</strong> <span style="font-size: 24px; color: #007bff;">${otp}</span></p>
             <p>If you did not request this Account Creation, please ignore this email.</p>
             <p>Thank you,</p>
-            <p>The SDO Team</p>
+            <p>The One dollar tree Team</p>
         </div>
     </body>
     </html>
@@ -256,7 +256,7 @@ router.post('/sendotp', asyncerror(async (req, res, next) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>SDO Forget Password OTP</title>
+        <title>One dollar tree Forget Password OTP</title>
         <!-- Include Bootstrap CSS -->
         <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
         <style>
@@ -296,13 +296,13 @@ router.post('/sendotp', asyncerror(async (req, res, next) => {
     </head>
     <body>
         <div class="container">
-            <h1>SDO Forget Password OTP</h1>
+            <h1>One dollar tree Forget Password OTP</h1>
             <p>Hello,</p>
-            <p>You have requested a password reset for your SDO account. Please use the following OTP to reset your password:</p>
+            <p>You have requested a password reset for your One dollar tree account. Please use the following OTP to reset your password:</p>
             <p><strong>Your OTP:</strong> <span style="font-size: 24px; color: #007bff;">${otp}</span></p>
             <p>If you did not request this password reset, please ignore this email.</p>
             <p>Thank you,</p>
-            <p>The SDO Team</p>
+            <p>The One dollar tree Team</p>
         </div>
     </body>
     </html>
