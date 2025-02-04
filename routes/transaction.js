@@ -107,7 +107,7 @@ router.post('/deposit/approve', verifyToken, isadmin, asyncerror(async (req, res
     user.locked_amount = balance;
     const deposit = await Deposit.find({ user: user._id, status: "approve" })
     ProfitReferralsTree(user, 2, 0, data.amount)
-    if (deposit.length === 0) {
+    if (deposit.length === 1) {
         console.log('here')
         let bonus = data.amount * 0.1; // 10% bonus
         user.balance += bonus;
