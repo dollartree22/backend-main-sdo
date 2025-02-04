@@ -114,7 +114,7 @@ router.post('/deposit/approve', verifyToken, isadmin, asyncerror(async (req, res
         user.balance += bonus;
         await Reward.create({ amount: bonus, user: req._id, type: "Deposit Bonus" });
     }
-    user.save();
+    await user.save();
     res.status(200).send({ success: true, data })
 }));
 
