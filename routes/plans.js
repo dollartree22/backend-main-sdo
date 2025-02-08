@@ -132,8 +132,9 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
             if (!updatedUser) return;
 
             let profit = 0;
+            let totalbalance=0;
             if (updatedUser.membership?.plan) {
-                let totalbalance = updatedUser.membership.locked_amount + updatedUser.membership.balance;
+                totalbalance = updatedUser.membership.locked_amount + updatedUser.membership.balance;
                 profit = (totalbalance * updatedUser.membership.plan.profit) / 100;
 
                 if (updatedUser.membership.end_date < today) {
@@ -144,13 +145,13 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
                     await Reward.create({ amount: profit, user: updatedUser._id, id: updatedUser.membership._id, type: "Investment Plan" });
                 }
             } else {
-                let totalbalance = updatedUser.locked_amount + updatedUser.balance;
+                totalbalance = updatedUser.locked_amount + updatedUser.balance;
                 profit = (totalbalance * 2) / 100;
                 await Reward.create({ amount: profit, user: updatedUser._id, type: "Normal Plan" });
                 updatedUser.balance += profit;
             }
 
-            ProfitReferralsTree(updatedUser, 2, 0, profit);
+            ProfitReferralsTree(updatedUser, 2, 0, totalbalance);
             await updatedUser.save();
             console.log(`Mining profit distributed for user ${updatedUser._id}`);
         } catch (error) {
