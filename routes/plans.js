@@ -109,7 +109,7 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
     const today = new Date();
     const nowET = moment().tz("America/New_York"); // Get current time in Eastern Time
     // Get the latest reward for the user
-    const lastReward = await Reward.findOne({ user: user._id })
+    const lastReward = await Reward.findOne({ user: user._id,type: { $in: ["Normal Plan", "Investment Plan"] }})
         .sort({ createdAt: -1 }) // Get the most recent reward
         .select("createdAt");
 
@@ -156,7 +156,7 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
         } catch (error) {
             console.error(`Error processing mining rewards for user ${req._id}:`, error);
         }
-    }, 4 * 60 * 60 * 1000); // 4 hours in milliseconds
+    }, 1 * 60 * 1000); // 4 hours in milliseconds
 
     res.status(200).send({ success: true, message: "Mining started. Profit will be credited after 4 hours." });
 }));
