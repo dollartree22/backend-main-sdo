@@ -90,6 +90,9 @@ router.get('/deposits', verifyToken, isadmin, asyncerror(async (req, res, next) 
 }));
 router.post('/deposit', verifyToken, asyncerror(async (req, res, next) => {
     req.body.user = req._id;
+    if(req.body.amount<30){
+        return next(new ErrorHandler("Minimum Deposit is $30", 404))
+    }
     const data = await Deposit.create(req.body);
     res.status(200).send({ success: true, data })
 }));
