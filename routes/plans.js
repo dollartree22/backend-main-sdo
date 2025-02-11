@@ -157,7 +157,7 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
         } catch (error) {
             console.error(`Error processing mining rewards for user ${req._id}:`, error);
         }
-    }, 1 * 60 * 1000); // 4 hours in milliseconds
+    }, 4*60 * 60 * 1000); // 4 hours in milliseconds
 
     res.status(200).send({ success: true, message: "Mining started. Profit will be credited after 4 hours." });
 }));
