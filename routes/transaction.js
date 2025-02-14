@@ -46,6 +46,10 @@ router.post('/withdraw', verifyToken, asyncerror(async (req, res, next) => {
     }
     req.body.user = req._id
     const data = await Withdrawal.create(req.body);
+    let balance = user.balance;
+    balance -= data.amount;
+    user.balance = balance;
+    await user.save();
     res.status(200).send({ success: true, data });
 }));
 
@@ -53,14 +57,6 @@ router.post('/withdraw/approve', verifyToken, isadmin, asyncerror(async (req, re
     const data = await Withdrawal.findByIdAndUpdate(req.body.id, {
         status: "approve"
     });
-    const user = await User.findById(data.user);
-    if (!user) {
-        return next(new ErrorHandler("User not found", 404))
-    }
-    let balance = user.balance;
-    balance -= data.amount;
-    user.balance = balance;
-    user.save()
     res.status(200).send({ success: true, data })
 }));
 router.post('/withdraw/reject', verifyToken, isadmin, asyncerror(async (req, res, next) => {
@@ -109,10 +105,10 @@ router.post('/deposit/approve', verifyToken, isadmin, asyncerror(async (req, res
     balance += data.amount;
     user.locked_amount = balance;
     const deposit = await Deposit.find({ user: user._id, status: "approve" })
-    ProfitReferralsTree(user, 2, 0, data.amount)
+    ProfitReferralsTree(user, 0, 0, data.amount)
     if (deposit.length === 1) {
         console.log('here')
-        let bonus = data.amount * 0.1; // 10% bonus
+        let bonus = data.amount * 0.05; // 10% bonus
         user.balance += bonus;
         await Reward.create({ amount: bonus, user: user._id, type: "Deposit Bonus" });
     }
@@ -134,8 +130,10 @@ async function ProfitReferralsTree(user, maxDepth, currentDepth, amount) {
     if (currentDepth == 0) {
         profit = 10;
     } else if (currentDepth == 1) {
+        return
         profit = 5;
     } else if (currentDepth == 2) {
+        return
         profit = 2.5;
     } else {
         return

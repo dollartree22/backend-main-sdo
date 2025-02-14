@@ -88,11 +88,11 @@ async function ProfitReferralsTree(user, maxDepth, currentDepth, amount) {
     }
     let profit;
     if (currentDepth == 0) {
-        profit = 0.2;
-    } else if (currentDepth == 1) {
-        profit = 0.15;
-    } else if (currentDepth == 2) {
         profit = 0.1;
+    } else if (currentDepth == 1) {
+        profit = 0.05;
+    } else if (currentDepth == 2) {
+        profit = 0.02;
     } else {
         return
     }
