@@ -108,17 +108,14 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
     const user = await User.findById(req._id).populate('membership.plan');
     const today = new Date();
     const nowET = moment().tz("America/New_York"); // Get current time in Eastern Time
-    // Get the latest reward for the user
-    const lastReward = await Reward.findOne({ user: user._id,type: { $in: ["Normal Plan", "Investment Plan"] }})
-        .sort({ createdAt: -1 }) // Get the most recent reward
-        .select("createdAt");
 
-    if (lastReward) {
-        const lastRewardET = moment(lastReward.createdAt).tz("America/New_York");
-
-        // If the last reward was created today, prevent mining
-        if (nowET.isSame(lastRewardET, 'day')) {
-            return res.status(400).send({ success: false, message: "You can only start mining once per day (ET timezone)." });
+    if (user.miningstartdata) {
+        const miningStartET = moment(user.miningstartdata).tz("America/New_York");
+        if (nowET.isSame(miningStartET, 'day')) {
+            return res.status(400).send({
+                success: false,
+                message: "You've already started mining today. Wait until tomorrow."
+            });
         }
     }
     // Proceed with starting mining
@@ -132,7 +129,7 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
             if (!updatedUser) return;
 
             let profit = 0;
-            let totalbalance=0;
+            let totalbalance = 0;
             if (updatedUser.membership?.plan) {
                 totalbalance = updatedUser.membership.locked_amount + updatedUser.membership.balance;
                 profit = (totalbalance * updatedUser.membership.plan.profit) / 100;
@@ -157,7 +154,7 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
         } catch (error) {
             console.error(`Error processing mining rewards for user ${req._id}:`, error);
         }
-    }, 4*60 * 60 * 1000); // 4 hours in milliseconds
+    }, 4 * 60 * 60 * 1000); // 4 hours in milliseconds
 
     res.status(200).send({ success: true, message: "Mining started. Profit will be credited after 4 hours." });
 }));
