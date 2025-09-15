@@ -5,12 +5,15 @@ const myemail = process.env.SMTP_USER;
 const mypass = process.env.SMTP_PASS;
 // configure nodemailer transport
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // use SSL
   auth: {
     user: myemail,
     pass: mypass,
   },
 });
+
 const sendmsg = (msg, email, subject) => {
   return new Promise((resolve, reject) => {
     const mailOptions = {
