@@ -26,8 +26,12 @@ const sendmsg = (msg, email, subject) => {
       } else {
         console.log('Email sent: ' + info.response);
         resolve(true);
+        console.log("SMTP_USER:", myemail);
+        console.log("SMTP_PASS:", mypass ? "FOUND" : "NOT FOUND");
       }
     });
   });
 };
-module.exports = { sendmsg }
+module.exports = { sendmsg } 
+
+
