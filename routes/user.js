@@ -181,7 +181,8 @@ router.post('/sendregotp', asyncerror(async (req, res, next) => {
         return next(new ErrorHandler("User Already Registered!"), 404)
     }
     const otp = otpgenerator.generate(6, { upperCaseAlphabets: false, lowerCaseAlphabets: false, digits: true, specialChars: false })
-    const response = await sendmsg(`<!DOCTYPE html>
+    const response = try {
+        await sendmsg(`<!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
@@ -236,13 +237,19 @@ router.post('/sendregotp', asyncerror(async (req, res, next) => {
         </div>
     </body>
     </html>
-    `, req.body.email, "Registeration OTP")
+    `, req.body.email, "Registeration OTP") 
+    }  catch (err) {
+        
     const token = jwt.sign({ email: req.body.email, otp }, process.env.JWT_SECRET, {
         expiresIn: "5m"
     })
     res.status(200).send({ success: true, token })
-
+   
+   console.error("Email error:", err);
+   return next(new ErrorHandler("OTP sending failed: " + err.message, 500));
+}
 }))
+
 router.post('/sendotp', asyncerror(async (req, res, next) => {
     const user = await User.findOne({
         email: req.body.email
@@ -251,7 +258,7 @@ router.post('/sendotp', asyncerror(async (req, res, next) => {
         return next(new ErrorHandler("User not found"), 404)
     }
     const otp = otpgenerator.generate(6, { upperCaseAlphabets: false, lowerCaseAlphabets: false, digits: true, specialChars: false })
-    const response = await sendmsg(`<!DOCTYPE html>
+    const response = try { await sendmsg(`<!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
@@ -306,13 +313,17 @@ router.post('/sendotp', asyncerror(async (req, res, next) => {
         </div>
     </body>
     </html>
-    `, user.email, "Forget Password OTP")
+    `, user.email, "Forget Password OTP") 
+                         }  catch (err) {
     const token = jwt.sign({ id: user._id, otp }, process.env.JWT_SECRET, {
         expiresIn: "5m"
     })
     res.status(200).send({ success: true, token })
-
+  console.error("Email error:", err);
+   return next(new ErrorHandler("OTP sending failed: " + err.message, 500));
+}
 }))
+
 router.post('/verifyotp', isTokenExpired, verifyToken, asyncerror(async (req, res, next) => {
     if (req.body.otp !== req.decoded.otp) {
         return next(new ErrorHandler("Wrong Otp Or Otp is expired!"), 405)
