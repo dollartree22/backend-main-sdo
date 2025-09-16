@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "start": "node server.js",
-  "test": "echo \"Error: no test specified\" && exit 1"
-}, 
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "author": "moiz",
   "license": "ISC",
   "dependencies": {
@@ -24,7 +24,7 @@
     "nodemailer": "^6.9.1",
     "otp-generator": "^4.0.1",
     "referral-codes": "^2.0.3",
-    "uuid": "^9.0.0", 
-    "twilio": "^5.0.0"
+    "twilio": "^5.9.0",
+    "uuid": "^9.0.0"
   }
 }
