@@ -5,7 +5,7 @@ const ErrorHandler = require('../middlewares/errorhandler');
 const { verifyToken, isTokenExpired } = require('../middlewares/verifyauth');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { sendmsg } = require('../middlewares/sendmsg');
+const sendmsg = require('../middlewares/sendmsg'); // ✅ fixed
 const User = require('../model/user');
 const cloudinary = require('cloudinary').v2;
 const referralCodes = require("referral-codes");
@@ -171,6 +171,7 @@ router.post('/changeinfo', verifyToken, asyncerror(async (req, res, next) => {
     const data = await User.findByIdAndUpdate(req._id, req.body);
     res.status(200).send({ success: true, data })
 }));
+
 
 router.post('/sendregotp', asyncerror(async (req, res, next) => {
   try {
