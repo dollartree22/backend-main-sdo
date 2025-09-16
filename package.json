@@ -24,6 +24,7 @@
     "nodemailer": "^6.9.1",
     "otp-generator": "^4.0.1",
     "referral-codes": "^2.0.3",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0", 
+    "twilio": "^5.0.0"
   }
 }
