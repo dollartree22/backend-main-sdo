@@ -6,8 +6,8 @@ async function sendmsg(to, otp) {
   try {
     const message = await client.messages.create({
       body: `Your OTP is ${otp}`,
-      from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`, // prefix whatsapp: add karo
-      to: `whatsapp:${to}` // e.g. whatsapp:+92322XXXXXXX
+     from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
+      to: `whatsapp:${to}`
     });
 
     console.log("WhatsApp OTP sent:", message.sid);
