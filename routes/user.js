@@ -333,50 +333,54 @@ router.post('/changeinfo', verifyToken, asyncerror(async (req, res, next) => {
 // }))
 
 router.post('/sendregotp', asyncerror(async (req, res, next) => {
-    try {
-        const user = await User.findOne({ email: req.body.email });
-        if (user) {
-            return next(new ErrorHandler("User Already Registered!"), 404);
-        }
-
-        const otp = otpgenerator.generate(6, { upperCaseAlphabets: false, lowerCaseAlphabets: false, digits: true, specialChars: false });
-
-        await sendmsg(`
-            <h1>One Dollar Tree Register OTP</h1>
-            <p>Your OTP is: <strong>${otp}</strong></p>
-        `, req.body.email, "Registration OTP");
-
-        const token = jwt.sign({ email: req.body.email, otp }, process.env.JWT_SECRET, { expiresIn: "5m" });
-
-        res.status(200).send({ success: true, token });
-    } catch (err) {
-        console.error("Email error:", err);
-        return next(new ErrorHandler("OTP sending failed: " + err.message, 500));
+  try {
+    const user = await User.findOne({ phone: req.body.phone });
+    if (user) {
+      return next(new ErrorHandler("User Already Registered!", 404));
     }
+
+    const otp = otpgenerator.generate(6, { 
+      upperCaseAlphabets: false, 
+      lowerCaseAlphabets: false, 
+      digits: true, 
+      specialChars: false 
+    });
+
+    await sendmsg(req.body.phone, otp);  // WhatsApp OTP
+
+    const token = jwt.sign({ phone: req.body.phone, otp }, process.env.JWT_SECRET, { expiresIn: "5m" });
+
+    res.status(200).send({ success: true, token });
+  } catch (err) {
+    console.error("WhatsApp OTP error:", err);
+    return next(new ErrorHandler("OTP sending failed: " + err.message, 500));
+  }
 }));
 
 
 router.post('/sendotp', asyncerror(async (req, res, next) => {
-    try {
-        const user = await User.findOne({ email: req.body.email });
-        if (!user) {
-            return next(new ErrorHandler("User not found"), 404);
-        }
-
-        const otp = otpgenerator.generate(6, { upperCaseAlphabets: false, lowerCaseAlphabets: false, digits: true, specialChars: false });
-
-        await sendmsg(`
-            <h1>One Dollar Tree Forget Password OTP</h1>
-            <p>Your OTP is: <strong>${otp}</strong></p>
-        `, user.email, "Forget Password OTP");
-
-        const token = jwt.sign({ id: user._id, otp }, process.env.JWT_SECRET, { expiresIn: "5m" });
-
-        res.status(200).send({ success: true, token });
-    } catch (err) {
-        console.error("Email error:", err);
-        return next(new ErrorHandler("OTP sending failed: " + err.message, 500));
+  try {
+    const user = await User.findOne({ phone: req.body.phone });
+    if (!user) {
+      return next(new ErrorHandler("User not found", 404));
     }
+
+    const otp = otpgenerator.generate(6, { 
+      upperCaseAlphabets: false, 
+      lowerCaseAlphabets: false, 
+      digits: true, 
+      specialChars: false 
+    });
+
+    await sendmsg(user.phone, otp);  // WhatsApp OTP
+
+    const token = jwt.sign({ id: user._id, otp }, process.env.JWT_SECRET, { expiresIn: "5m" });
+
+    res.status(200).send({ success: true, token });
+  } catch (err) {
+    console.error("WhatsApp OTP error:", err);
+    return next(new ErrorHandler("OTP sending failed: " + err.message, 500));
+  }
 }));
 
 // Image
