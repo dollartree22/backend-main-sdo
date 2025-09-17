@@ -31,7 +31,7 @@ async function generateUniqueReferralCode() {
 }
 
 router.post('/register', asyncerror(async (req, res, next) => {
-    const { email, password, referral } = req.body;
+    const { name ,email, password, referral } = req.body;
     const existingUser = await User.findOne({ email });
     if (existingUser) return next(new ErrorHandler("User already exists", 400));
 
@@ -41,7 +41,7 @@ router.post('/register', asyncerror(async (req, res, next) => {
         const referredByUser = await User.findOne({ referralcode: referral });
         if (referredByUser) req.body.referredBy = referredByUser._id;
     }
-
+    req.body.name = name;
     req.body.email = email;
     req.body.password = hashedPassword;
     req.body.referralcode = await generateUniqueReferralCode();
