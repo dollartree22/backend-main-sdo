@@ -7,157 +7,325 @@ const Withdrawal = require('../model/Withdrawals');
 const User = require('../model/user');
 const ErrorHandler = require('../middlewares/errorhandler');
 const Reward = require('../model/Reward');
-
+const mongoose = require('mongoose');
 
 // Withdrawal
 router.get('/withdraw', verifyToken, asyncerror(async (req, res, next) => {
     const data = await Withdrawal.find({ user: req._id }).sort({ createdAt: -1 });
-    res.status(200).send({ success: true, data })
-}));
-router.get('/withdraws', verifyToken, isadmin, asyncerror(async (req, res, next) => {
-    const pending = await Withdrawal.find({
-        status: "pending"
-    }).populate('user').sort({ createdAt: -1 });
-    const approved = await Withdrawal.find({
-        status: "approve"
-    }).populate('user').sort({ createdAt: -1 });
-    const rejected = await Withdrawal.find({
-        status: "reject"
-    }).populate('user').sort({ createdAt: -1 });
-    res.status(200).send({ success: true, pending, approved, rejected })
-}));
-router.post('/withdraw', verifyToken, asyncerror(async (req, res, next) => {
-    const user = await User.findById(req._id);
-    if (req.body.password !== user.funding_password) {
-        return next(new ErrorHandler('Wrong password!', 404))
-    }
-    if (user.balance < req.body.amount) {
-        return next(new ErrorHandler('Low Balance!', 404))
-    }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Set the time to midnight to represent the start of the day
-
-    const lastwithdraw = await Withdrawal.findOne({
-        user: user._id,
-        createdAt: { $gte: today }, // Find withdrawals created today or later
-    });
-    if (lastwithdraw) {
-        return next(new ErrorHandler('You can Only request One withdrawal a day!', 404))
-    }
-    req.body.user = req._id
-    const data = await Withdrawal.create(req.body);
-    let balance = user.balance;
-    balance -= data.amount;
-    user.balance = balance;
-    await user.save();
     res.status(200).send({ success: true, data });
 }));
 
-router.post('/withdraw/approve', verifyToken, isadmin, asyncerror(async (req, res, next) => {
-    const data = await Withdrawal.findByIdAndUpdate(req.body.id, {
-        status: "approve"
-    });
-    res.status(200).send({ success: true, data })
+router.get('/withdraws', verifyToken, isadmin, asyncerror(async (req, res, next) => {
+    const pending = await Withdrawal.find({ status: "pending" })
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 });
+    
+    const approved = await Withdrawal.find({ status: "approve" })
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 });
+    
+    const rejected = await Withdrawal.find({ status: "reject" })
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 });
+    
+    res.status(200).send({ success: true, pending, approved, rejected });
 }));
+
+router.post('/withdraw', verifyToken, asyncerror(async (req, res, next) => {
+    const { amount, password } = req.body;
+    
+    if (!amount || !password) {
+        return next(new ErrorHandler('Amount and password are required', 400));
+    }
+
+    if (amount < 10) {
+        return next(new ErrorHandler('Minimum withdrawal amount is $10', 400));
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const user = await User.findById(req._id).session(session);
+        if (!user) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('User not found', 404));
+        }
+
+        // Verify funding password
+        const isFundingPasswordValid = await user.compareFundingPassword(password);
+        if (!isFundingPasswordValid) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('Wrong funding password!', 401));
+        }
+
+        if (user.balance < amount) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('Insufficient balance!', 400));
+        }
+
+        // Check for today's withdrawals
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const todayWithdrawals = await Withdrawal.findOne({
+            user: user._id,
+            createdAt: { $gte: today, $lt: tomorrow },
+            status: { $in: ['pending', 'approve'] }
+        }).session(session);
+
+        if (todayWithdrawals) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('You can only request one withdrawal per day!', 400));
+        }
+
+        // Create withdrawal request
+        const withdrawalData = await Withdrawal.create([{
+            user: req._id,
+            amount: amount,
+            status: 'pending',
+            wallet_address: user.wallet_address
+        }], { session });
+
+        // Deduct balance
+        user.balance -= amount;
+        await user.save({ session });
+
+        await session.commitTransaction();
+        session.endSession();
+
+        res.status(200).send({ success: true, data: withdrawalData[0] });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        next(error);
+    }
+}));
+
+router.post('/withdraw/approve', verifyToken, isadmin, asyncerror(async (req, res, next) => {
+    const { id } = req.body;
+    
+    if (!id) {
+        return next(new ErrorHandler('Withdrawal ID is required', 400));
+    }
+
+    const data = await Withdrawal.findByIdAndUpdate(
+        id, 
+        { status: "approve" },
+        { new: true }
+    );
+    
+    res.status(200).send({ success: true, data });
+}));
+
 router.post('/withdraw/reject', verifyToken, isadmin, asyncerror(async (req, res, next) => {
-    const data = await Withdrawal.findByIdAndUpdate(req.body.id, {
-        status: "reject"
-    })
-    res.status(200).send({ success: true, data })
+    const { id } = req.body;
+    
+    if (!id) {
+        return next(new ErrorHandler('Withdrawal ID is required', 400));
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const withdrawal = await Withdrawal.findById(id).session(session);
+        if (!withdrawal) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('Withdrawal not found', 404));
+        }
+
+        // Refund balance to user
+        const user = await User.findById(withdrawal.user).session(session);
+        if (user) {
+            user.balance += withdrawal.amount;
+            await user.save({ session });
+        }
+
+        const data = await Withdrawal.findByIdAndUpdate(
+            id,
+            { status: "reject" },
+            { new: true, session }
+        );
+
+        await session.commitTransaction();
+        session.endSession();
+
+        res.status(200).send({ success: true, data });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        next(error);
+    }
 }));
 
 // Deposit
 router.get('/deposit', verifyToken, asyncerror(async (req, res, next) => {
     const data = await Deposit.find({ user: req._id }).sort({ createdAt: -1 });
-    res.status(200).send({ success: true, data })
+    res.status(200).send({ success: true, data });
 }));
-// Admin
+
+// Admin deposits view
 router.get('/deposits', verifyToken, isadmin, asyncerror(async (req, res, next) => {
-    const pending = await Deposit.find({
-        status: "pending"
-    }).populate('user').sort({ createdAt: -1 });
-    const approved = await Deposit.find({
-        status: "approve"
-    }).populate('user').sort({ createdAt: -1 });
-    const rejected = await Deposit.find({
-        status: "reject"
-    }).populate('user').sort({ createdAt: -1 });
-    res.status(200).send({ success: true, pending, approved, rejected })
+    const pending = await Deposit.find({ status: "pending" })
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 });
+    
+    const approved = await Deposit.find({ status: "approve" })
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 });
+    
+    const rejected = await Deposit.find({ status: "reject" })
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 });
+    
+    res.status(200).send({ success: true, pending, approved, rejected });
 }));
+
 router.post('/deposit', verifyToken, asyncerror(async (req, res, next) => {
-    req.body.user = req._id;
-    if(req.body.amount<50){
-        return next(new ErrorHandler("Minimum Deposit is $30", 404))
+    const { amount } = req.body;
+    
+    if (!amount || amount < 50) {
+        return next(new ErrorHandler("Minimum deposit is $50", 400));
     }
+
+    req.body.user = req._id;
     const data = await Deposit.create(req.body);
-    res.status(200).send({ success: true, data })
+    
+    res.status(200).send({ success: true, data });
 }));
 
 router.post('/deposit/approve', verifyToken, isadmin, asyncerror(async (req, res, next) => {
-    const data = await Deposit.findByIdAndUpdate(req.body.id, {
-        status: "approve"
-    });
-    const user = await User.findById(data.user);
-    if (!user) {
-        return next(new ErrorHandler("User not found", 404))
+    const { id } = req.body;
+    
+    if (!id) {
+        return next(new ErrorHandler('Deposit ID is required', 400));
     }
-    let balance = user.locked_amount;
-    balance += data.amount;
-    user.locked_amount = balance;
-    const deposit = await Deposit.find({ user: user._id, status: "approve" })
-    ProfitReferralsTree(user, 0, 0, data.amount)
-    if (deposit.length === 1) {
-        console.log('here')
-        let bonus = data.amount * 0.05; // 10% bonus
-        user.balance += bonus;
-        await Reward.create({ amount: bonus, user: user._id, type: "Deposit Bonus" });
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const deposit = await Deposit.findByIdAndUpdate(
+            id,
+            { status: "approve" },
+            { new: true, session }
+        );
+
+        if (!deposit) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler("Deposit not found", 404));
+        }
+
+        const user = await User.findById(deposit.user).session(session);
+        if (!user) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler("User not found", 404));
+        }
+
+        // Add to locked amount
+        user.locked_amount += deposit.amount;
+        
+        // First deposit bonus (5%)
+        const userDeposits = await Deposit.find({ 
+            user: user._id, 
+            status: "approve" 
+        }).session(session);
+
+        if (userDeposits.length === 1) {
+            const bonus = deposit.amount * 0.05;
+            user.balance += bonus;
+            await Reward.create([{
+                amount: bonus,
+                user: user._id,
+                type: "Deposit Bonus"
+            }], { session });
+        }
+
+        // Process referral profits
+        await ProfitReferralsTree(user, 3, 0, deposit.amount, session);
+
+        await user.save({ session });
+        await session.commitTransaction();
+        session.endSession();
+
+        res.status(200).send({ success: true, data: deposit });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        next(error);
     }
-    await user.save();
-    res.status(200).send({ success: true, data })
 }));
 
-async function ProfitReferralsTree(user, maxDepth, currentDepth, amount) {
-    if (currentDepth > maxDepth) {
-        console.log("leaving")
+async function ProfitReferralsTree(user, maxDepth, currentDepth, amount, session = null) {
+    if (currentDepth >= maxDepth || !user.referredBy) {
         return;
     }
-    const referredbyId = user.referredBy;
-    const referredby = await User.findById(referredbyId);
-    if (!referredby) {
-        return
+
+    const referredBy = await User.findById(user.referredBy);
+    if (!referredBy) {
+        return;
     }
-    let profit;
-    if (currentDepth == 0) {
-        profit = 10;
-    } else if (currentDepth == 1) {
-        return
-        profit = 5;
-    } else if (currentDepth == 2) {
-        return
-        profit = 2.5;
-    } else {
-        return
+
+    let profitPercentage;
+    switch (currentDepth) {
+        case 0:
+            profitPercentage = 10; // 10% for level 1
+            break;
+        case 1:
+            profitPercentage = 5;  // 5% for level 2
+            break;
+        case 2:
+            profitPercentage = 2.5; // 2.5% for level 3
+            break;
+        default:
+            return;
     }
-    let profitamount = (amount * profit) / 100
-    referredby.balance += profitamount;
-    await Reward.create({ amount: profitamount, user: referredby._id, type: "Refferal Team Profit" });
-    console.log(`profit added in`, referredby._id, profitamount)
-    referredby.save();
-    ProfitReferralsTree(referredby, maxDepth, currentDepth + 1, amount);
+
+    const profitAmount = (amount * profitPercentage) / 100;
+    referredBy.balance += profitAmount;
+    
+    await Reward.create([{
+        amount: profitAmount,
+        user: referredBy._id,
+        type: `Referral Level ${currentDepth + 1} Profit`
+    }], { session });
+
+    await referredBy.save({ session });
+
+    // Continue to next level
+    await ProfitReferralsTree(referredBy, maxDepth, currentDepth + 1, amount, session);
 }
 
 router.post('/deposit/reject', verifyToken, isadmin, asyncerror(async (req, res, next) => {
-    const data = await Deposit.findByIdAndUpdate(req.body.id, {
-        status: "reject"
-    })
-    res.status(200).send({ success: true, data })
+    const { id } = req.body;
+    
+    if (!id) {
+        return next(new ErrorHandler('Deposit ID is required', 400));
+    }
+
+    const data = await Deposit.findByIdAndUpdate(
+        id,
+        { status: "reject" },
+        { new: true }
+    );
+    
+    res.status(200).send({ success: true, data });
 }));
 
-// Rewwards
-
+// Rewards
 router.get('/reward', verifyToken, asyncerror(async (req, res, next) => {
     const data = await Reward.find({ user: req._id }).sort({ createdAt: -1 });
-    res.status(200).send({ success: true, data })
+    res.status(200).send({ success: true, data });
 }));
 
-module.exports = router
+module.exports = router;

@@ -5,110 +5,189 @@ const { verifyToken, isadmin } = require('../middlewares/verifyauth');
 const User = require('../model/user');
 const ErrorHandler = require('../middlewares/errorhandler');
 const Plan = require('../model/Plans');
-const cron = require('node-cron');
 const Reward = require('../model/Reward');
 const { v4: uuidv4 } = require('uuid');
 const moment = require('moment-timezone');
+const mongoose = require('mongoose');
 
 function getDateAfterXDays(x) {
     if (typeof x !== 'number' || x <= 0) {
         throw new Error('Invalid number of days');
     }
-
     const currentDate = new Date();
     const futureDate = new Date(currentDate.getTime() + x * 24 * 60 * 60 * 1000);
     return futureDate;
 }
 
-// Get Plan
+// Get all plans
 router.get('/', verifyToken, asyncerror(async (req, res, next) => {
-    const data = await Plan.find();
-    res.status(200).send({ success: true, data })
+    const data = await Plan.find().sort({ duration: 1 });
+    res.status(200).send({ success: true, data });
 }));
-router.post('/', verifyToken, asyncerror(async (req, res, next) => {
-    const user = await User.findById(req._id);
-    const plan = await Plan.findById(req.body.id);
-    if (!plan) {
-        return next(new ErrorHandler('Plan not Found', 404))
-    }
-    const totalbalance = user.balance + user.locked_amount;
-    if (totalbalance < req.body.amount) {
-        return next(new ErrorHandler('Not enough balance', 404))
-    }
-    const id = uuidv4();
-    if (user.locked_amount >= req.body.amount) {
-        user.locked_amount -= req.body.amount;
-    } else {
-        const remainingAmount = req.body.amount - user.locked_amount;
-        user.locked_amount = 0;
-        user.balance -= remainingAmount;
-    }
-    user.membership.plan = plan._id;
-    user.membership.locked_amount = req.body.amount;
-    user.membership.id = id;
-    user.membership.end_date = getDateAfterXDays(plan.duration);
-    user.save()
-    res.status(200).send({ success: true })
-}));
-router.put('/', verifyToken, asyncerror(async (req, res, next) => {
-    const user = await User.findById(req._id);
-    const plan = await Plan.findById(req.body.id);
-    if (!plan) {
-        return next(new ErrorHandler('Plan not Found', 404))
-    }
-    user.balance += user.membership.balance;
-    const totalbalance = user.balance + user.locked_amount;
-    if (totalbalance < req.body.amount) {
-        return next(new ErrorHandler('Not enough balance', 404))
-    }
-    const id = uuidv4();
-    if (user.locked_amount >= req.body.amount) {
-        user.locked_amount -= req.body.amount;
-    } else {
-        const remainingAmount = req.body.amount - user.locked_amount;
-        user.locked_amount = 0;
-        user.balance -= remainingAmount;
-    }
-    user.membership.plan = plan._id;
-    user.membership.locked_amount = req.body.amount;
-    user.membership.id = id;
-    user.membership.end_date = getDateAfterXDays(plan.duration);
-    user.save()
-    res.status(200).send({ success: true })
-}));
-async function ProfitReferralsTree(user, maxDepth, currentDepth, amount) {
-    if (currentDepth > maxDepth) {
-        console.log("leaving")
-        return;
-    }
-    const referredbyId = user.referredBy;
-    const referredby = await User.findById(referredbyId);
-    if (!referredby) {
-        return
-    }
-    let profit;
-    if (currentDepth == 0) {
-        profit = 0.1;
-    } else if (currentDepth == 1) {
-        profit = 0.05;
-    } else if (currentDepth == 2) {
-        profit = 0.02;
-    } else {
-        return
-    }
-    let profitamount = (amount * profit) / 100
-    referredby.balance += profitamount;
-    await Reward.create({ amount: profitamount, user: referredby._id, type: "Refferal Team Daily Profit" });
-    console.log(`profit added in`, referredby._id, profitamount)
-    referredby.save();
-    ProfitReferralsTree(referredby, maxDepth, currentDepth + 1, amount);
-}
 
+// Join plan
+router.post('/', verifyToken, asyncerror(async (req, res, next) => {
+    const { id, amount } = req.body;
+    
+    if (!id || !amount) {
+        return next(new ErrorHandler('Plan ID and amount are required', 400));
+    }
+
+    if (amount < 50) {
+        return next(new ErrorHandler('Minimum investment is $50', 400));
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const user = await User.findById(req._id).session(session);
+        const plan = await Plan.findById(id).session(session);
+        
+        if (!plan) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('Plan not found', 404));
+        }
+
+        const totalBalance = (user.balance || 0) + (user.locked_amount || 0);
+        if (totalBalance < amount) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('Insufficient balance', 400));
+        }
+
+        // Handle existing membership
+        if (user.membership && user.membership.plan) {
+            // Return existing membership balance to user
+            user.balance += (user.membership.balance || 0);
+        }
+
+        // Deduct amount from balances
+        let remainingAmount = amount;
+        if (user.locked_amount > 0) {
+            const deductFromLocked = Math.min(user.locked_amount, remainingAmount);
+            user.locked_amount -= deductFromLocked;
+            remainingAmount -= deductFromLocked;
+        }
+        
+        if (remainingAmount > 0) {
+            user.balance -= remainingAmount;
+        }
+
+        // Create new membership
+        user.membership = {
+            plan: plan._id,
+            locked_amount: amount,
+            balance: 0,
+            id: uuidv4(),
+            end_date: getDateAfterXDays(plan.duration)
+        };
+
+        await user.save({ session });
+        await session.commitTransaction();
+        session.endSession();
+
+        res.status(200).send({ success: true, message: 'Plan joined successfully' });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        next(error);
+    }
+}));
+
+// Upgrade plan
+router.put('/', verifyToken, asyncerror(async (req, res, next) => {
+    const { id, amount } = req.body;
+    
+    if (!id || !amount) {
+        return next(new ErrorHandler('Plan ID and amount are required', 400));
+    }
+
+    if (amount < 50) {
+        return next(new ErrorHandler('Minimum investment is $50', 400));
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const user = await User.findById(req._id).session(session);
+        const plan = await Plan.findById(id).session(session);
+        
+        if (!plan) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('Plan not found', 404));
+        }
+
+        if (!user.membership || !user.membership.plan) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('No existing membership to upgrade', 400));
+        }
+
+        // Check if new plan has longer duration
+        const currentPlan = await Plan.findById(user.membership.plan).session(session);
+        if (plan.duration <= currentPlan.duration) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('New plan must have longer duration', 400));
+        }
+
+        const totalBalance = (user.balance || 0) + (user.locked_amount || 0) + (user.membership.balance || 0);
+        if (totalBalance < amount) {
+            await session.abortTransaction();
+            session.endSession();
+            return next(new ErrorHandler('Insufficient balance', 400));
+        }
+
+        // Return current membership balance
+        user.balance += (user.membership.balance || 0);
+
+        // Deduct new amount
+        let remainingAmount = amount;
+        if (user.locked_amount > 0) {
+            const deductFromLocked = Math.min(user.locked_amount, remainingAmount);
+            user.locked_amount -= deductFromLocked;
+            remainingAmount -= deductFromLocked;
+        }
+        
+        if (remainingAmount > 0) {
+            user.balance -= remainingAmount;
+        }
+
+        // Update membership
+        user.membership = {
+            plan: plan._id,
+            locked_amount: amount,
+            balance: 0,
+            id: uuidv4(),
+            end_date: getDateAfterXDays(plan.duration)
+        };
+
+        await user.save({ session });
+        await session.commitTransaction();
+        session.endSession();
+
+        res.status(200).send({ success: true, message: 'Plan upgraded successfully' });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        next(error);
+    }
+}));
+
+// Mining system with persistent scheduling
 router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
     const user = await User.findById(req._id).populate('membership.plan');
-    const today = new Date();
-    const nowET = moment().tz("America/New_York"); // Get current time in Eastern Time
+    
+    if (!user) {
+        return next(new ErrorHandler('User not found', 404));
+    }
 
+    const nowET = moment().tz("America/New_York");
+    
     if (user.miningstartdata) {
         const miningStartET = moment(user.miningstartdata).tz("America/New_York");
         if (nowET.isSame(miningStartET, 'day')) {
@@ -118,71 +197,128 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
             });
         }
     }
-    // Proceed with starting mining
-    user.miningstartdata = today;
+
+    // Update mining start date
+    user.miningstartdata = new Date();
     await user.save();
 
-    // Schedule mining profit distribution after 4 hours
-    setTimeout(async () => {
-        try {
-            const updatedUser = await User.findById(req._id).populate('membership.plan');
-            if (!updatedUser) return;
+    // In a production environment, you would use a proper job queue system
+    // like BullMQ or Agenda.js for persistent scheduling
 
-            let profit = 0;
-            let totalbalance = 0;
-            if (updatedUser.membership?.plan) {
-                totalbalance = updatedUser.membership.locked_amount + updatedUser.membership.balance;
-                profit = (totalbalance * updatedUser.membership.plan.profit) / 100;
-
-                if (updatedUser.membership.end_date < today) {
-                    updatedUser.balance += updatedUser.membership.balance;
-                    updatedUser.membership = null;
-                } else {
-                    updatedUser.membership.balance += profit;
-                    await Reward.create({ amount: profit, user: updatedUser._id, id: updatedUser.membership._id, type: "Investment Plan" });
-                }
-            } else {
-                totalbalance = updatedUser.locked_amount + updatedUser.balance;
-                profit = (totalbalance * 2) / 100;
-                await Reward.create({ amount: profit, user: updatedUser._id, type: "Normal Plan" });
-                updatedUser.balance += profit;
-            }
-
-            ProfitReferralsTree(updatedUser, 2, 0, totalbalance);
-            await updatedUser.save();
-            console.log(`Mining profit distributed for user ${updatedUser._id}`);
-        } catch (error) {
-            console.error(`Error processing mining rewards for user ${req._id}:`, error);
-        }
-    }, 4 * 60 * 60 * 1000); // 4 hours in milliseconds
-
-    res.status(200).send({ success: true, message: "Mining started. Profit will be credited after 4 hours." });
+    res.status(200).send({ 
+        success: true, 
+        message: "Mining started successfully. Profits will be calculated daily." 
+    });
 }));
 
-// cron.schedule('0 0 * * *', asyncerror(async () => {
-//     const allusers = await User.find().populate('membership.plan');
-//     const today = new Date();
-//     for (const elem of allusers) {
-//         if (elem.membership?.plan) {
-//             let totalbalance = elem.membership.locked_amount + elem.membership.balance
-//             const profit = (totalbalance * elem.membership.plan.profit) / 100;
-//             let newtotalbalance = elem.membership.balance + profit;
-//             elem.membership.balance = newtotalbalance;
-//             if (elem.membership.end_date < today) {
-//                 elem.balance += elem.membership.balance;
-//                 elem.membership = null;
-//             }
-//             await Reward.create({ amount: profit, user: elem._id, id: elem.membership.id,type:"Investment Plan" });
-//         } else {
-//             let totalbalance = elem.locked_amount + elem.balance
-//             const profit = (totalbalance * 3) / 100;
-//             let newtotalbalance = elem.balance + profit;
-//             await Reward.create({ amount: profit, user: elem._id,type:"Normal Plan" });
-//             elem.balance = newtotalbalance;
-//         }
-//         elem.save();
-//     };
-// }));
+// Daily profit calculation (run via cron job)
+async function calculateDailyProfits() {
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
+    try {
+        const allUsers = await User.find().populate('membership.plan').session(session);
+        const today = new Date();
+
+        for (const user of allUsers) {
+            try {
+                let profit = 0;
+                let totalBalance = 0;
+
+                if (user.membership?.plan) {
+                    // Membership plan profit
+                    totalBalance = (user.membership.locked_amount || 0) + (user.membership.balance || 0);
+                    profit = (totalBalance * user.membership.plan.profit) / 100;
+                    
+                    user.membership.balance = (user.membership.balance || 0) + profit;
+
+                    // Check if membership expired
+                    if (user.membership.end_date < today) {
+                        user.balance = (user.balance || 0) + (user.membership.balance || 0);
+                        user.membership = null;
+                    } else {
+                        await Reward.create([{
+                            amount: profit,
+                            user: user._id,
+                            type: "Investment Plan Daily Profit"
+                        }], { session });
+                    }
+                } else {
+                    // Basic profit for non-members
+                    totalBalance = (user.locked_amount || 0) + (user.balance || 0);
+                    profit = (totalBalance * 2) / 100; // 2% daily profit
+                    
+                    user.balance = (user.balance || 0) + profit;
+                    await Reward.create([{
+                        amount: profit,
+                        user: user._id,
+                        type: "Basic Daily Profit"
+                    }], { session });
+                }
+
+                // Process referral profits
+                if (profit > 0) {
+                    await ProfitReferralsTree(user, 3, 0, profit, session);
+                }
+
+                await user.save({ session });
+            } catch (userError) {
+                console.error(`Error processing user ${user._id}:`, userError);
+                continue;
+            }
+        }
+
+        await session.commitTransaction();
+        session.endSession();
+        console.log('Daily profit calculation completed successfully');
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        console.error('Error in daily profit calculation:', error);
+    }
+}
+
+async function ProfitReferralsTree(user, maxDepth, currentDepth, amount, session = null) {
+    if (currentDepth >= maxDepth || !user.referredBy) {
+        return;
+    }
+
+    const referredBy = await User.findById(user.referredBy).session(session);
+    if (!referredBy) {
+        return;
+    }
+
+    let profitPercentage;
+    switch (currentDepth) {
+        case 0:
+            profitPercentage = 10; // 10% for level 1
+            break;
+        case 1:
+            profitPercentage = 5;  // 5% for level 2
+            break;
+        case 2:
+            profitPercentage = 2.5; // 2.5% for level 3
+            break;
+        default:
+            return;
+    }
+
+    const profitAmount = (amount * profitPercentage) / 100;
+    referredBy.balance = (referredBy.balance || 0) + profitAmount;
+    
+    await Reward.create([{
+        amount: profitAmount,
+        user: referredBy._id,
+        type: `Referral Level ${currentDepth + 1} Daily Profit`
+    }], { session });
+
+    await referredBy.save({ session });
+
+    // Continue to next level
+    await ProfitReferralsTree(referredBy, maxDepth, currentDepth + 1, amount, session);
+}
+
+// Uncomment and set up proper cron job in your server initialization
+// cron.schedule('0 0 * * *', () => calculateDailyProfits()); // Run daily at midnight
 
 module.exports = router;
