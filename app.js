@@ -21,8 +21,7 @@ cloudinary.config({
 
 // CORS configuration
 app.use(cors({
-  // origin: process.env.FRONTEND_DOMAIN || 'http://localhost:3000',
-  origin : "*",
+  origin : process.env.FRONTEND_DOMAIN ? process.env.FRONTEND_DOMAIN.split(',') : 'http://localhost:3000',
   credentials: true
 }));
 
