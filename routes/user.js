@@ -17,12 +17,12 @@ router.post(
 
     if (!email || !password) {
       return next(new ErrorHandler("Email and password are required", 400));
-    }
-
+    } 
+      
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) return next(new ErrorHandler("No User found", 404));
-
-    // Direct password comparison (no hashing)
+     console.log(user); 
+     // Direct password comparison (no hashing)
     if (password !== user.password) {
       return next(new ErrorHandler("Wrong Credentials", 401));
     }
