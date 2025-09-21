@@ -10,45 +10,40 @@ const cloudinary = require("cloudinary").v2;
 const referralCodes = require("referral-codes");
 
 // Auth - Login (Without password hashing)
-router.post(
-  "/login",
-  asyncerror(async (req, res, next) => {
-    const { email, password } = req.body;
+// Login Route
+router.post("/login", asyncerror(async (req, res, next) => {
+  const { email, password } = req.body;
 
-    if (!email || !password) {
-      return next(new ErrorHandler("Email and password are required", 400));
-    } 
+  if (!email || !password) {
+    return next(new ErrorHandler("Email and password are required", 400));
+  } 
 
-    const trimmedEmail = email.trim().toLowerCase();
-    const trimmedPassword = password.trim();
+  const trimmedEmail = email.trim().toLowerCase();
+  const trimmedPassword = password.trim();
 
-    const user = await User.findOne({ email: trimmedEmail.toLowerCase() });
-    if (!user) return next(new ErrorHandler("No User found", 404));
-     
-    console.log("user found:", {
-        "email": user.email,
-        "storedPassword": user.password,
-        "inputPassword": trimmedPassword,
-        "match": user.password === trimmedPassword
-    });
+  const user = await User.findOne({ email: trimmedEmail });
+  if (!user) return next(new ErrorHandler("No User found", 404));
+  
+  console.log("User found:", user);
 
-     // Direct password comparison (no hashing)
-    if (trimmedPassword.trim() !== user.password.trim()) {
-      return next(new ErrorHandler("Wrong Credentials", 401));
-    }
+  // ✅ Compare hash with bcrypt
+  const isMatch = await user.comparePassword(trimmedPassword);
+  if (!isMatch) {
+    return next(new ErrorHandler("Wrong Credentials", 401));
+  }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
-    res.status(200).send({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-      },
-    });
-  })
-);
+  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+  res.status(200).send({
+    success: true,
+    token,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+    },
+  });
+}));
+
 
 // Auth - Register (Without password hashing)
 router.post(
