@@ -45,7 +45,6 @@ router.post(
         id: user._id,
         name: user.name,
         email: user.email,
-        password: user.password // Return password directly
       },
     });
   })
@@ -76,9 +75,9 @@ router.post(
 
     // Store password directly (no hashing)
     const user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      password: password, // Direct password storage
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password: password.trim(), // Direct password storage
       referralcode,
       referredBy,
     });
