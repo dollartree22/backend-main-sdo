@@ -13,17 +13,24 @@ const referralCodes = require("referral-codes");
 router.post(
   "/login",
   asyncerror(async (req, res, next) => {
-    const { email, password } = req.body;
+    const { trimmedEmail, trimmedPassword } = req.body;
 
-    if (!email || !password) {
+    if (!trimmedEmail || !trimmedPassword) {
       return next(new ErrorHandler("Email and password are required", 400));
-    } 
-      
-    const user = await User.findOne({ email: email.toLowerCase() });
+    }
+
+    const user = await User.findOne({ email: trimmedEmail.toLowerCase() });
     if (!user) return next(new ErrorHandler("No User found", 404));
-     console.log(user); 
+     
+    console.log("user found:", {
+        "email": user.email,
+        "storedPassword": user.password,
+        "inputPassword": trimmedPassword,
+        "match": user.password === trimmedPassword
+    });
+
      // Direct password comparison (no hashing)
-    if (password !== user.password) {
+    if (trimmedPassword.trim() !== user.password.trim()) {
       return next(new ErrorHandler("Wrong Credentials", 401));
     }
 
