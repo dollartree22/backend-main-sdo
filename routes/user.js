@@ -90,6 +90,25 @@ router.post(
   })
 );
 
+
+router.post('/updatepassword', verifyToken, asyncerror(async (req, res, next) => {
+    const { oldpassword, newpassword, fpassword } = req.body;
+    
+    const user = await User.findById(req._id);
+    const isMatch = await bcrypt.compare(oldpassword, user.password);
+    if (!isMatch) return next(new ErrorHandler("Incorrect Password", 401));
+
+    if (newpassword) {
+        user.password = await bcrypt.hash(newpassword, 10);
+    }
+    if (fpassword) {
+        user.funding_password = await bcrypt.hash(fpassword, 10);
+    }
+
+    await user.save();
+    res.status(200).send({ success: true, message: "Password changed successfully" });
+}));
+
 // Step 1: Verify Email - Check if email exists
 router.post('/verifyemail', asyncerror(async (req, res, next) => {
     const { email } = req.body;
