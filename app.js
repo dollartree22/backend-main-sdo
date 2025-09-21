@@ -21,7 +21,7 @@ cloudinary.config({
 
 // CORS configuration
 app.use(cors({
-  origin : process.env.FRONTEND_DOMAIN , 
+  origin : "*", 
   credentials: true
 }));
 
