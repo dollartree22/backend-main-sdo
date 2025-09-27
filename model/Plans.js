@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const userSchema = new mongoose.Schema({
+const planSchema = new mongoose.Schema({
     title: {
         type: String,
         required: true
@@ -15,10 +15,12 @@ const userSchema = new mongoose.Schema({
     },
     duration: {
         type: Number,
-        required:true
+        required: true
     }
 });
 
-const Plan = mongoose.model("plan", userSchema);
+const Plan = mongoose.model("Plan", planSchema);
+
+console.log("✅ Plan model registered");
 
 module.exports = Plan;

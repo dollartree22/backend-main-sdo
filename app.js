@@ -10,6 +10,7 @@ const errorMiddleware = require('./middlewares/error.js');
 const User = require('./model/user');
 const Reward = require('./model/Reward');
 
+
 // Cloudinary configuration - USE ENVIRONMENT VARIABLES
 const cloudinary = require('cloudinary').v2;
 
@@ -27,18 +28,18 @@ app.use(cors({
 
 // Database connection
 connecttomongo();
-
+// Debugging: list all registered models
+const mongoose = require("mongoose");
+console.log("Registered Models:", mongoose.modelNames());
 // Body parser middleware
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.json({ limit: '50mb' }));
-
 // Routes
 app.use('/api/admin', require('./routes/admin.js'));
 app.use('/api/user', require('./routes/user.js'));
 app.use('/api/transaction', require('./routes/transaction.js'));
 app.use('/api/plan', require('./routes/plans.js'));
-
 // Error middleware
 app.use(errorMiddleware);
 
@@ -60,9 +61,7 @@ const calculateDailyProfits = asyncerror(async () => {
           if (user.membership.end_date < today) {
             user.balance = (user.balance || 0) + user.membership.balance;
             user.membership = null;
-          }
-          
-          // Create reward record
+          } // Create reward record
           await Reward.create({ 
             amount: profit, 
             user: user._id, 
@@ -86,15 +85,73 @@ const calculateDailyProfits = asyncerror(async () => {
         console.error(`Error processing user ${user._id}:`, userError);
       }
     }
-    
     console.log('Daily profit calculation completed');
   } catch (error) {
     console.error('Error in daily profit calculation:', error);
   }
 });
-
-// Schedule daily profit calculation (run once per day)
 setInterval(calculateDailyProfits, 24 * 60 * 60 * 1000);
-// For testing: run immediately
 calculateDailyProfits();
 module.exports = app;
+
+
+
+
+
+//  app.js - Fixed version
+// const express = require('express');
+// const app = express();
+// const connecttomongo = require('./db');
+// const cors = require('cors');
+// const asyncerror = require('./middlewares/catchasyncerror');
+// const bodyParser = require('body-parser');
+// require('dotenv').config();
+// const errorMiddleware = require('./middlewares/error.js');
+
+// // Cloudinary configuration
+// const cloudinary = require('cloudinary').v2;
+// cloudinary.config({ 
+//   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+//   api_key: process.env.CLOUDINARY_API_KEY, 
+//   api_secret: process.env.CLOUDINARY_API_SECRET
+// });
+
+// // CORS configuration - FIXED
+// app.use(cors({
+//   origin: process.env.FRONTEND_URL || "http://localhost:3000",
+//   credentials: true
+// }));
+
+// // Database connection
+// connecttomongo();
+
+// // Body parser middleware
+// app.use(bodyParser.json({ limit: '50mb' }));
+// app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
+// app.use(express.json({ limit: '50mb' }));
+
+// // Import models to ensure they're registered - FIXED
+// require('./model/user');
+// require('./model/Plans');
+// require('./model/Reward');
+// require('./model/Deposits');
+// require('./model/Withdrawals');
+// require('./model/Admin');
+
+// // Debugging: list all registered models
+// const mongoose = require("mongoose");
+// console.log("✅ Registered Models:", mongoose.modelNames());
+
+// // Routes - FIXED ORDER
+// app.use('/api/admin', require('./routes/admin'));
+// app.use('/api/user', require('./routes/user'));
+// app.use('/api/transaction', require('./routes/transaction'));
+// app.use('/api/plan', require('./routes/plans'));
+
+// // Error middleware
+// app.use(errorMiddleware);
+
+// // Remove duplicate calculateDailyProfits function from here
+// // It should only be in routes/plans.js
+
+// module.exports = app;

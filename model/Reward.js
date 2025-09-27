@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const userSchema = new mongoose.Schema({
+const rewardSchema = new mongoose.Schema({
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
@@ -12,13 +12,14 @@ const userSchema = new mongoose.Schema({
     id: {
         type: String
     },
-    type:{
+    type: {
         type: String
     }
 }, {
     timestamps: true
 });
 
-const Reward = mongoose.model("reward", userSchema);
+// ✅ yahan dono jagah rewardSchema hi use hoga
+const Reward = mongoose.model("Reward", rewardSchema);
 
 module.exports = Reward;
