@@ -407,4 +407,4 @@ router.post('/test-profit', verifyToken, asyncerror(async (req, res, next) => {
 // cron.schedule('0 0 * * *', () => calculateDailyProfits()); // Run daily at midnight
 
 module.exports = router;
-module.exports.calculateDailyProfits = calculateDailyProfits;
+ 
