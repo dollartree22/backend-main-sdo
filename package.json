@@ -20,7 +20,7 @@
     "jsonwebtoken": "^9.0.0",
     "moment-timezone": "^0.5.47",
     "mongoose": "^7.5.0",
-    "node-cron": "^3.0.2",
+    "node-cron": "^3.0.3",
     "nodemailer": "^6.9.1",
     "otp-generator": "^4.0.1",
     "referral-codes": "^2.0.3",
