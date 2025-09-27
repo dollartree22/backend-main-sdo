@@ -202,14 +202,75 @@ router.post('/startmining', verifyToken, asyncerror(async (req, res, next) => {
     user.miningstartdata = new Date();
     await user.save();
 
-    // In a production environment, you would use a proper job queue system
-    // like BullMQ or Agenda.js for persistent scheduling
+    // Calculate immediate profit for today
+    await calculateUserProfit(user);
 
     res.status(200).send({ 
         success: true, 
-        message: "Mining started successfully. Profits will be calculated daily." 
+        message: "Mining started successfully. Today's profit has been calculated." 
     });
 }));
+
+// Calculate profit for a single user
+async function calculateUserProfit(user) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        let profit = 0;
+
+        if (user.membership?.plan) {
+            // Membership plan profit - FIXED CALCULATION
+            profit = (user.membership.locked_amount * user.membership.plan.profit) / 100;
+            
+            // Add profit to membership balance
+            user.membership.balance = (user.membership.balance || 0) + profit;
+            
+            // Check if membership expired
+            const today = new Date();
+            if (user.membership.end_date < today) {
+                // Transfer balance to main account if expired
+                user.balance = (user.balance || 0) + (user.membership.balance || 0);
+                user.membership = null;
+            } else {
+                // Create reward record
+                await Reward.create([{
+                    amount: profit,
+                    user: user._id,
+                    type: "Investment Plan Daily Profit"
+                }], { session });
+            }
+        } else {
+            // Basic profit for non-members
+            const totalBalance = (user.locked_amount || 0) + (user.balance || 0);
+            profit = (totalBalance * 2) / 100; // 2% daily profit
+            
+            user.balance = (user.balance || 0) + profit;
+            await Reward.create([{
+                amount: profit,
+                user: user._id,
+                type: "Basic Daily Profit"
+            }], { session });
+        }
+
+        // Process referral profits if profit was generated
+        if (profit > 0) {
+            await ProfitReferralsTree(user, 3, 0, profit, session);
+        }
+
+        await user.save({ session });
+        await session.commitTransaction();
+        session.endSession();
+        
+        console.log(`Profit calculated for user ${user._id}: $${profit}`);
+        return profit;
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        console.error('Error calculating user profit:', error);
+        throw error;
+    }
+}
 
 // Daily profit calculation (run via cron job)
 async function calculateDailyProfits() {
@@ -223,15 +284,14 @@ async function calculateDailyProfits() {
         for (const user of allUsers) {
             try {
                 let profit = 0;
-                let totalBalance = 0;
 
                 if (user.membership?.plan) {
-                    // Membership plan profit
-                    totalBalance = (user.membership.locked_amount || 0) + (user.membership.balance || 0);
-                    profit = (totalBalance * user.membership.plan.profit) / 100;
+                    // Membership plan profit - FIXED CALCULATION
+                    profit = (user.membership.locked_amount * user.membership.plan.profit) / 100;
                     
+                    // Add profit to membership balance
                     user.membership.balance = (user.membership.balance || 0) + profit;
-
+                    
                     // Check if membership expired
                     if (user.membership.end_date < today) {
                         user.balance = (user.balance || 0) + (user.membership.balance || 0);
@@ -245,7 +305,7 @@ async function calculateDailyProfits() {
                     }
                 } else {
                     // Basic profit for non-members
-                    totalBalance = (user.locked_amount || 0) + (user.balance || 0);
+                    const totalBalance = (user.locked_amount || 0) + (user.balance || 0);
                     profit = (totalBalance * 2) / 100; // 2% daily profit
                     
                     user.balance = (user.balance || 0) + profit;
@@ -317,6 +377,31 @@ async function ProfitReferralsTree(user, maxDepth, currentDepth, amount, session
     // Continue to next level
     await ProfitReferralsTree(referredBy, maxDepth, currentDepth + 1, amount, session);
 }
+
+// Manual profit test endpoint
+router.post('/test-profit', verifyToken, asyncerror(async (req, res, next) => {
+    const user = await User.findById(req._id).populate('membership.plan');
+    
+    if (!user.membership?.plan) {
+        return next(new ErrorHandler('No active plan found', 400));
+    }
+
+    const profit = (user.membership.locked_amount * user.membership.plan.profit) / 100;
+    user.membership.balance = (user.membership.balance || 0) + profit;
+    await user.save();
+
+    res.status(200).send({ 
+        success: true, 
+        message: `Profit calculated: $${profit.toFixed(2)}`,
+        profit: profit,
+        new_membership_balance: user.membership.balance,
+        plan_details: {
+            locked_amount: user.membership.locked_amount,
+            profit_percentage: user.membership.plan.profit,
+            plan_name: user.membership.plan.title
+        }
+    });
+}));
 
 // Uncomment and set up proper cron job in your server initialization
 // cron.schedule('0 0 * * *', () => calculateDailyProfits()); // Run daily at midnight
