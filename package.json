@@ -21,6 +21,7 @@
     "mongoose": "^7.5.0",
     "node-cron": "^3.0.2",
     "nodemailer": "^6.9.1",
+    "nodemon": "^3.1.10",
     "otp-generator": "^4.0.1",
     "referral-codes": "^2.0.3",
     "uuid": "^9.0.0"
