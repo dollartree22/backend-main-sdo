@@ -42,7 +42,12 @@ async function generateUniqueReferralCode() {
 
 router.post('/register', isTokenExpired, verifyToken, asyncerror(async (req, res, next) => {
     if (req.body.otp !== req.decoded.otp) {
-        return next(new ErrorHandler("Wrong Otp Or Otp is expired!"), 405)
+        return next(new ErrorHandler("Wrong Otp Or Otp is expired!"), 405);
+    }
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: req.body.email });
+    if (existingUser) {
+        return res.status(400).send({ success: false, message: "User already exists" });
     }
     if (req.body.referral) {
         let referredBy = await User.findOne({ referralcode: req.body.referral });
@@ -50,12 +55,14 @@ router.post('/register', isTokenExpired, verifyToken, asyncerror(async (req, res
             req.body.referredBy = referredBy._id;
         }
     }
-    req.body.email = req.decoded.email;
     req.body.referralcode = await generateUniqueReferralCode();
     const user = await User.create(req.body);
+
+    // Generate token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
     res.status(200).send({ success: true, token });
 }));
+
 
 // Define an API route to get referrals up to 3 levels deep below a given user
 router.get('/referrals/:userId', asyncerror(async (req, res) => {
@@ -243,7 +250,9 @@ router.post('/sendregotp', asyncerror(async (req, res, next) => {
     res.status(200).send({ success: true, token })
 
 }))
+
 router.post('/sendotp', asyncerror(async (req, res, next) => {
+    console.log(req.body)
     const user = await User.findOne({
         email: req.body.email
     })
@@ -313,6 +322,45 @@ router.post('/sendotp', asyncerror(async (req, res, next) => {
     res.status(200).send({ success: true, token })
 
 }))
+
+router.post('/sendotpforreg', asyncerror(async (req, res, next) => {
+    console.log(req.body);
+    
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).send({ success: false, message: "Email is required" });
+    }
+
+    // Generate OTP
+    const otp = otpgenerator.generate(6, { 
+        upperCaseAlphabets: false, 
+        lowerCaseAlphabets: false, 
+        digits: true, 
+        specialChars: false 
+    });
+
+    // Send OTP email
+    await sendmsg(`<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SDO Forget Password OTP</title>
+    </head>
+    <body>
+        <h1>SDO Forget Password OTP</h1>
+        <p>Your OTP is: <strong>${otp}</strong></p>
+    </body>
+    </html>`, 
+    email, "Forget Password OTP");
+
+    // Create JWT token with OTP only (no user ID)
+    const token = jwt.sign({ otp }, process.env.JWT_SECRET, { expiresIn: "5m" });
+
+    res.status(200).send({ success: true, token });
+}));
+
+
 router.post('/verifyotp', isTokenExpired, verifyToken, asyncerror(async (req, res, next) => {
     if (req.body.otp !== req.decoded.otp) {
         return next(new ErrorHandler("Wrong Otp Or Otp is expired!"), 405)

@@ -13,7 +13,8 @@ const cloudinary = require('cloudinary').v2;
 // ✅ Proper CORS setup for your frontend domain
 const allowedOrigins = [
   'https://onedollartree.online',
-  'https://www.onedollartree.online'
+  'https://www.onedollartree.online',
+  'http://localhost:3000',
 ];
 
 app.use(cors({
